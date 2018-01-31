@@ -638,6 +638,7 @@ class DefaultValueError(Error, ValueError):
 
 def _fixpath(p):
     """Apply tilde expansion and absolutization to a path."""
+    #取绝对路径
     return os.path.abspath(os.path.expanduser(p))
 
 
@@ -667,6 +668,7 @@ def _get_config_dirs(project=None):
     snap = os.environ.get('SNAP')
     snap_c = os.environ.get('SNAP_COMMON')
 
+    #如上注释指明的配置，返回多个可能的路径
     cfg_dirs = [
         _fixpath(os.path.join('~', '.' + project)) if project else None,
         _fixpath('~'),
@@ -697,14 +699,17 @@ def _search_dirs(dirs, basename, extension=""):
 
 def _find_config_files(project, prog, extension):
     if prog is None:
+        #取可执行程序名称
         prog = os.path.basename(sys.argv[0])
         if prog.endswith(".py"):
             prog = prog[:-3]
 
     cfg_dirs = _get_config_dirs(project)
+    #尝试着在cfg_dirs中找不同的目录，确定是否存在名称为project,或者prog的文件
     config_files = (_search_dirs(cfg_dirs, p, extension)
                     for p in [project, prog] if p)
 
+    #返回找到的配置文件
     return [x for x in config_files if x]
 
 
@@ -2337,14 +2342,18 @@ class ConfigOpts(collections.Mapping):
         """Initialize a ConfigCliParser object for option parsing."""
 
         if prog is None:
+            #进程名称
             prog = os.path.basename(sys.argv[0])
             if prog.endswith(".py"):
+                #跳过可执行文件.py的后缀
                 prog = prog[:-3]
 
         if default_config_files is None:
+            #获取默认配置文件
             default_config_files = find_config_files(project, prog)
 
         if default_config_dirs is None:
+            #获取默认配置目录 $(bar).conf.d
             default_config_dirs = find_config_dirs(project, prog)
 
         self._oparser = _CachedArgumentParser(
@@ -2453,6 +2462,7 @@ class ConfigOpts(collections.Mapping):
 
         self._validate_default_values = validate_default_values
 
+        #_pre_setup 如果没有默认配置文件，默认配置目录 ，则为其提供默认的数据
         prog, default_config_files, default_config_dirs = self._pre_setup(
             project, prog, version, usage, description, epilog,
             default_config_files, default_config_dirs)
