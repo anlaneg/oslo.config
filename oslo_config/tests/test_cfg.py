@@ -167,6 +167,32 @@ class HelpTestCase(BaseTestCase):
         self.assertIn('optional', f.getvalue())
         self.assertIn('-h, --help', f.getvalue())
 
+    def test_print_strOpt_with_choices_help(self):
+        f = moves.StringIO()
+        cli_opts = [
+            cfg.StrOpt('aa', short='a', default='xx',
+                       choices=['xx', 'yy', 'zz'],
+                       help='StrOpt with choices.'),
+            cfg.StrOpt('bb', short='b', default='yy',
+                       choices=[None, 'yy', 'zz'],
+                       help='StrOpt with choices.'),
+            cfg.StrOpt('cc', short='c', default='zz',
+                       choices=['', 'yy', 'zz'],
+                       help='StrOpt with choices.'),
+        ]
+        self.conf.register_cli_opts(cli_opts)
+        self.conf([])
+        self.conf.print_help(file=f)
+        self.assertIn('usage: test FOO BAR', f.getvalue())
+        self.assertIn('optional', f.getvalue())
+        self.assertIn('-h, --help', f.getvalue())
+        self.assertIn('StrOpt with choices. Allowed values: xx, yy, zz',
+                      f.getvalue())
+        self.assertIn('StrOpt with choices. Allowed values: <None>, yy, zz',
+                      f.getvalue())
+        self.assertIn("StrOpt with choices. Allowed values: '', yy, zz",
+                      f.getvalue())
+
     def test_print_sorted_help(self):
         f = moves.StringIO()
         self.conf.register_cli_opt(cfg.StrOpt('abc'))
@@ -224,7 +250,8 @@ class FindConfigFilesTestCase(BaseTestCase):
         self.assertEqual(cfg.find_config_files(project='blaa'), config_files)
 
     def test_find_config_files_snap(self):
-        config_files = ['/snap/nova/current/etc/blaa/blaa.conf']
+        config_files = ['/snap/nova/current/etc/blaa/blaa.conf',
+                        '/var/snap/nova/common/etc/blaa/blaa.conf']
         fake_env = {'SNAP': '/snap/nova/current/',
                     'SNAP_COMMON': '/var/snap/nova/common/'}
 
@@ -233,7 +260,8 @@ class FindConfigFilesTestCase(BaseTestCase):
                         lambda p: p in config_files))
         self.useFixture(fixtures.MonkeyPatch('os.environ', fake_env))
 
-        self.assertEqual(cfg.find_config_files(project='blaa'), config_files)
+        self.assertEqual(cfg.find_config_files(project='blaa'),
+                         ['/var/snap/nova/common/etc/blaa/blaa.conf'])
 
     def test_find_config_files_with_extension(self):
         config_files = ['/etc/foo.json']
@@ -2235,6 +2263,7 @@ class OptGroupsTestCase(BaseTestCase):
         self.assertTrue(hasattr(self.conf, 'blaa'))
         self.assertTrue(hasattr(self.conf.blaa, 'foo'))
         self.assertEqual('bar', self.conf.blaa.foo)
+        self.assertEqual('blaa', str(blaa_group))
 
     def test_autocreate_group_by_name(self):
         self.conf.register_cli_opt(cfg.StrOpt('foo'), group='blaa')
@@ -3208,16 +3237,7 @@ class OverridesTestCase(BaseTestCase):
         self.assertRaises(ValueError,
                           self.conf.set_default, 'oo', 'c', 'f')
 
-    def test_enforce_type_default_override(self):
-        self.conf.register_opt(cfg.StrOpt('foo', default='foo'))
-        self.conf([])
-        self.assertEqual('foo', self.conf.foo)
-        self.conf.set_default('foo', 'bar')
-        self.assertEqual('bar', self.conf.foo)
-        self.conf.clear_default('foo')
-        self.assertEqual('foo', self.conf.foo)
-
-    def test_enforce_type_wrong_type_default(self):
+    def test_wrong_type_default_override(self):
         self.conf.register_opt(cfg.IntOpt('foo', default=1))
         self.conf([])
         self.assertEqual(1, self.conf.foo)
@@ -3293,7 +3313,7 @@ class OverridesTestCase(BaseTestCase):
         self.conf.clear_override('foo')
         self.assertIsNone(self.conf.foo)
 
-    def test_enforce_type_str_override(self):
+    def test__str_override(self):
         self.conf.register_opt(cfg.StrOpt('foo'))
         self.conf.set_override('foo', True)
         self.conf([])
@@ -3301,16 +3321,7 @@ class OverridesTestCase(BaseTestCase):
         self.conf.clear_override('foo')
         self.assertIsNone(self.conf.foo)
 
-    def test_no_enforce_type_str_override(self):
-        self.conf.register_opt(cfg.StrOpt('foo'))
-        self.conf.set_override('foo', True, enforce_type=False)
-        self.conf([])
-        # Ensure we don't change the provided type by mistake
-        self.assertEqual(True, self.conf.foo)
-        self.conf.clear_override('foo')
-        self.assertIsNone(self.conf.foo)
-
-    def test_enforce_type_wrong_type_override(self):
+    def test__wrong_type_override(self):
         self.conf.register_opt(cfg.IntOpt('foo'))
         self.assertRaises(ValueError, self.conf.set_override,
                           'foo', "not_really_a_int")
@@ -3329,7 +3340,7 @@ class OverridesTestCase(BaseTestCase):
         self.assertRaises(ValueError,
                           self.conf.set_override, 'oo', 'c', 'f')
 
-    def test_enforce_type_bool_override(self):
+    def test_bool_override(self):
         self.conf.register_opt(cfg.BoolOpt('foo'))
         self.conf.set_override('foo', 'True')
         self.conf([])
@@ -3337,7 +3348,7 @@ class OverridesTestCase(BaseTestCase):
         self.conf.clear_override('foo')
         self.assertIsNone(self.conf.foo)
 
-    def test_enforce_type_int_override_with_None(self):
+    def test_int_override_with_None(self):
         self.conf.register_opt(cfg.IntOpt('foo'))
         self.conf.set_override('foo', None)
         self.conf([])
@@ -3345,7 +3356,7 @@ class OverridesTestCase(BaseTestCase):
         self.conf.clear_override('foo')
         self.assertIsNone(self.conf.foo)
 
-    def test_enforce_type_str_override_with_None(self):
+    def test_str_override_with_None(self):
         self.conf.register_opt(cfg.StrOpt('foo'))
         self.conf.set_override('foo', None)
         self.conf([])
@@ -3353,7 +3364,7 @@ class OverridesTestCase(BaseTestCase):
         self.conf.clear_override('foo')
         self.assertIsNone(self.conf.foo)
 
-    def test_enforce_type_List_override(self):
+    def test_List_override(self):
         self.conf.register_opt(cfg.ListOpt('foo'))
         self.conf.set_override('foo', ['aa', 'bb'])
         self.conf([])

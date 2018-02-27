@@ -49,7 +49,6 @@ def _list_table(headers, data, title='', columns=None):
         yield '   - * %s' % row[0]
         for r in row[1:]:
             yield '     * %s' % r
-    yield ''
 
 
 def _indent(text, n=2):
@@ -125,7 +124,7 @@ def _format_group(app, namespace, group_name, group_obj, opt_list):
         try:
             if opt.mutable:
                 yield _indent(
-                    ':Mutable: This option can be changed without restarting.',
+                    ':Mutable: This option can be changed without restarting.'
                 )
         except AttributeError as err:
             # NOTE(dhellmann): keystoneauth defines its own Opt class,
@@ -147,12 +146,11 @@ def _format_group(app, namespace, group_name, group_obj, opt_list):
                               (opt.dest, err))
         if opt.advanced:
             yield _indent(
-                ':Advanced Option: intended for advanced users and not used',)
+                ':Advanced Option: Intended for advanced users and not used')
             yield _indent(
-                ':by the majority of users, and might have a significant',)
+                'by the majority of users, and might have a significant', 6)
             yield _indent(
-                ':effect on stability and/or performance.',)
-        yield ''
+                'effect on stability and/or performance.', 6)
 
         try:
             help_text = opt.help % {'default': 'the value above'}
@@ -162,10 +160,23 @@ def _format_group(app, namespace, group_name, group_obj, opt_list):
             # invalid formatting characters
             help_text = opt.help
         if help_text:
-            yield _indent(help_text)
             yield ''
+            yield _indent(help_text)
+
+        # We don't bother outputting this if not using new-style choices with
+        # inline descriptions
+        if getattr(opt.type, 'choices', None) and not all(
+                x is None for x in opt.type.choices.values()):
+            yield ''
+            yield _indent('.. rubric:: Possible values')
+            for choice in opt.type.choices:
+                yield ''
+                yield _indent(_get_choice_text(choice))
+                yield _indent(_indent(
+                    opt.type.choices[choice] or '<No description provided>'))
 
         if opt.deprecated_opts:
+            yield ''
             for line in _list_table(
                     ['Group', 'Name'],
                     ((d.group or group_name,
@@ -173,7 +184,9 @@ def _format_group(app, namespace, group_name, group_obj, opt_list):
                      for d in opt.deprecated_opts),
                     title='Deprecated Variations'):
                 yield _indent(line)
+
         if opt.deprecated_for_removal:
+            yield ''
             yield _indent('.. warning::')
             if opt.deprecated_since:
                 yield _indent('   This option is deprecated for removal '
@@ -182,10 +195,9 @@ def _format_group(app, namespace, group_name, group_obj, opt_list):
                 yield _indent('   This option is deprecated for removal.')
             yield _indent('   Its value may be silently ignored ')
             yield _indent('   in the future.')
-            yield ''
             if opt.deprecated_reason:
+                yield ''
                 yield _indent('   :Reason: ' + opt.deprecated_reason)
-            yield ''
 
         yield ''
 

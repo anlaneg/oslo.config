@@ -657,8 +657,8 @@ def _get_config_dirs(project=None):
     If a project is specified and installed from a snap package, following
     directories are also returned:
 
-      ${SNAP}/etc/${project}
       ${SNAP_COMMON}/etc/${project}
+      ${SNAP}/etc/${project}
 
     Otherwise, if project is not specified, these directories are returned:
 
@@ -674,8 +674,8 @@ def _get_config_dirs(project=None):
         _fixpath('~'),
         os.path.join('/etc', project) if project else None,
         '/etc',
-        os.path.join(snap, "etc", project) if snap and project else None,
         os.path.join(snap_c, "etc", project) if snap_c and project else None,
+        os.path.join(snap, "etc", project) if snap and project else None,
     ]
     return [x for x in cfg_dirs if x]
 
@@ -729,8 +729,8 @@ def find_config_files(project=None, prog=None, extension='.conf'):
       ~/
       /etc/${project}/
       /etc/
-      ${SNAP}/etc/${project}
       ${SNAP_COMMON}/etc/${project}
+      ${SNAP}/etc/${project}
 
     We return an absolute path for (at most) one of each the default config
     files, for the topmost directory it exists in.
@@ -761,8 +761,8 @@ def find_config_dirs(project=None, prog=None, extension='.conf.d'):
       ~/
       /etc/${project}/
       /etc/
-      ${SNAP}/etc/${project}
       ${SNAP_COMMON}/etc/${project}
+      ${SNAP}/etc/${project}
 
     We return an absolute path for each of the two config dirs,
     in the first place we find it (iff we find it).
@@ -1199,7 +1199,7 @@ class DeprecatedOpt(object):
         [group2]
         opt2=val21,val22
 
-    Then the value of "[group1]/opt1" will be ['val11', 'val12', 'val21',
+    Then the value of "[group1]/opt1" will be ['val10', 'val11', 'val21',
     'val22'].
 
     .. versionadded:: 1.2
@@ -1230,7 +1230,8 @@ class StrOpt(Opt):
     Option with ``type`` :class:`oslo_config.types.String`
 
     :param name: the option's name
-    :param choices: Optional sequence of valid values.
+    :param choices: Optional sequence of either valid values or tuples of valid
+        values with descriptions.
     :param quotes: If True and string is enclosed with single or double
                    quotes, will strip those quotes.
     :param regex: Optional regular expression (string or compiled
@@ -1253,10 +1254,14 @@ class StrOpt(Opt):
 
     .. versionchanged:: 2.7
        Added *max_length* parameter
+
+    .. versionchanged:: 5.2
+       The *choices* parameter will now accept a sequence of tuples, where each
+       tuple is of form (*choice*, *description*)
     """
 
     def __init__(self, name, choices=None, quotes=None,
-                 regex=None, ignore_case=None, max_length=None, **kwargs):
+                 regex=None, ignore_case=False, max_length=None, **kwargs):
         super(StrOpt, self).__init__(name,
                                      type=types.String(
                                          choices=choices,
@@ -1265,6 +1270,28 @@ class StrOpt(Opt):
                                          ignore_case=ignore_case,
                                          max_length=max_length),
                                      **kwargs)
+
+    def _get_choice_text(self, choice):
+        if choice is None:
+            return '<None>'
+        elif choice == '':
+            return "''"
+        return six.text_type(choice)
+
+    def _get_argparse_kwargs(self, group, **kwargs):
+        """Extends the base argparse keyword dict for the config dir option."""
+        kwargs = super(StrOpt, self)._get_argparse_kwargs(group)
+
+        if getattr(self.type, 'choices', None):
+            choices_text = ', '.join([self._get_choice_text(choice)
+                                      for choice in self.type.choices])
+            if kwargs['help'] is None:
+                kwargs['help'] = ''
+
+            kwargs['help'].rstrip('\n')
+            kwargs['help'] += '\n Allowed values: %s\n' % choices_text
+
+        return kwargs
 
 
 class BoolOpt(Opt):
@@ -1432,7 +1459,8 @@ class PortOpt(Opt):
     :param name: the option's name
     :param min: minimum value the port can take
     :param max: maximum value the port can take
-    :param choices: Optional sequence of valid values.
+    :param choices: Optional sequence of either valid values or tuples of valid
+        values with descriptions.
     :param \*\*kwargs: arbitrary keyword arguments passed to :class:`Opt`
 
     .. versionadded:: 2.6
@@ -1442,6 +1470,9 @@ class PortOpt(Opt):
        Allow port number with 0.
     .. versionchanged:: 3.16
        Added *min* and *max* parameters.
+    .. versionchanged:: 5.2
+       The *choices* parameter will now accept a sequence of tuples, where each
+       tuple is of form (*choice*, *description*)
     """
 
     def __init__(self, name, min=None, max=None, choices=None, **kwargs):
@@ -1833,6 +1864,9 @@ class OptGroup(object):
     def _clear(self):
         """Clear this group's option parsing state."""
         self._argparse_group = None
+
+    def __str__(self):
+        return self.name
 
 
 class ParseError(iniparser.ParseError):
@@ -2715,12 +2749,8 @@ class ConfigOpts(collections.Mapping):
         __import__(module_str)
         self._get_group(group)
 
-    @removals.removed_kwarg('enforce_type', "The argument enforce_type has "
-                            "changed its default value to True and then will"
-                            " be removed completely.",
-                            version='4.0', removal_version='5.0')
     @__clear_cache
-    def set_override(self, name, override, group=None, enforce_type=True):
+    def set_override(self, name, override, group=None):
         """Override an opt value.
 
         Override the command line, config file and default values of a
@@ -2729,21 +2759,15 @@ class ConfigOpts(collections.Mapping):
         :param name: the name/dest of the opt
         :param override: the override value
         :param group: an option OptGroup object or group name
-        :param enforce_type: a boolean whether to convert the override
-         value to the option's type, None is *not* converted even
-         if enforce_type is True.
+
         :raises: NoSuchOptError, NoSuchGroupError
         """
         opt_info = self._get_opt_info(name, group)
         opt_info['override'] = self._get_enforced_type_value(
-            opt_info['opt'], override, enforce_type)
+            opt_info['opt'], override)
 
-    @removals.removed_kwarg('enforce_type', "The argument enforce_type has "
-                            "changed its default value to True and then will"
-                            " be removed completely.",
-                            version='4.0', removal_version='5.0')
     @__clear_cache
-    def set_default(self, name, default, group=None, enforce_type=True):
+    def set_default(self, name, default, group=None):
         """Override an opt's default value.
 
         Override the default value of given option. A command line or
@@ -2752,27 +2776,18 @@ class ConfigOpts(collections.Mapping):
         :param name: the name/dest of the opt
         :param default: the default value
         :param group: an option OptGroup object or group name
-        :param enforce_type: a boolean whether to convert the default
-         value to the option's type, None is *not* converted even
-         if enforce_type is True.
+
         :raises: NoSuchOptError, NoSuchGroupError
         """
         opt_info = self._get_opt_info(name, group)
         opt_info['default'] = self._get_enforced_type_value(
-            opt_info['opt'], default, enforce_type)
+            opt_info['opt'], default)
 
-    def _get_enforced_type_value(self, opt, value, enforce_type):
+    def _get_enforced_type_value(self, opt, value):
         if value is None:
             return None
-        try:
-            converted = self._convert_value(value, opt)
-        except (ValueError, TypeError):
-            if enforce_type:
-                raise
-        if enforce_type:
-            return converted
-        else:
-            return value
+
+        return self._convert_value(value, opt)
 
     @__clear_cache
     def clear_override(self, name, group=None):
