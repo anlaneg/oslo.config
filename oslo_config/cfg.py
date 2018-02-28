@@ -1005,6 +1005,7 @@ class Opt(object):
         :param namespace: a _Namespace object
         :param group_name: a group name
         """
+        #将组名称合上属性名称组成names
         names = [(group_name, self.dest)]
         current_name = (group_name, self.name)
 
@@ -2208,8 +2209,11 @@ class _Namespace(argparse.Namespace):
         :param names: a list of (section, name) tuples
         :param positional: whether this is a positional option
         """
+        #names是一个元组列表，故遍历列表时，一次可以拿到两个，一个是group名，一个是属性名
         for group_name, name in names:
+            #统一合起属性名
             name = name if group_name is None else group_name + '_' + name
+            #自self中提取此value
             value = getattr(self, name, None)
             if value is not None:
                 # argparse ignores default=None for nargs='*' and returns []
@@ -2293,6 +2297,7 @@ class _Namespace(argparse.Namespace):
         try:
             return self._get_cli_value(names, positional)
         except KeyError:
+            #修正group 为None时的名称再尝试
             names = [(g if g is not None else 'DEFAULT', n) for g, n in names]
             values = self._get_file_value(
                 names, multi=multi, normalized=normalized,
