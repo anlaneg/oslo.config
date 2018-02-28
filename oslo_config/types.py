@@ -349,7 +349,7 @@ class Number(ConfigType):
     def _formatter(self, value):
         return str(value)
 
-
+#定义整型，对外提供min,max约束
 class Integer(Number):
 
     """Integer type.

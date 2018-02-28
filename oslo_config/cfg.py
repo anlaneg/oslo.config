@@ -1,3 +1,4 @@
+# encoding:utf-8
 # Copyright 2012 Red Hat, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -679,7 +680,7 @@ def _get_config_dirs(project=None):
     ]
     return [x for x in cfg_dirs if x]
 
-
+#遍历dirs,检查basename+extension文件是否存在，如果存在返回对应路径
 def _search_dirs(dirs, basename, extension=""):
     """Search a list of directories for a given filename or directory name.
 
@@ -696,7 +697,7 @@ def _search_dirs(dirs, basename, extension=""):
         if os.path.exists(path):
             return path
 
-
+#查找project的配置文件
 def _find_config_files(project, prog, extension):
     if prog is None:
         #取可执行程序名称
@@ -743,7 +744,7 @@ def find_config_files(project=None, prog=None, extension='.conf'):
     """
     return _find_config_files(project, prog, extension)
 
-
+#通过扩展.conf.d的目录名称，取对应的文件
 def find_config_dirs(project=None, prog=None, extension='.conf.d'):
     """Return a list of default configuration dirs.
 
@@ -774,6 +775,7 @@ def find_config_dirs(project=None, prog=None, extension='.conf.d'):
     return _find_config_files(project, prog, extension)
 
 
+#检查opt是否已注册
 def _is_opt_registered(opts, opt):
     """Check whether an opt with the same name is already registered.
 
@@ -799,7 +801,7 @@ def set_defaults(opts, **kwargs):
         if opt.dest in kwargs:
             opt.default = kwargs[opt.dest]
 
-
+#除DEFAULT外，其它section全用小写
 def _normalize_group_name(group_name):
     if group_name == 'DEFAULT':
         return group_name
@@ -921,16 +923,21 @@ class Opt(object):
                  deprecated_for_removal=False, deprecated_reason=None,
                  deprecated_since=None, mutable=False, advanced=False):
         if name.startswith('_'):
+            #不容许名称以'_'开头
             raise ValueError('illegal name %s with prefix _' % (name,))
+        #选项名称
         self.name = name
 
+        #默认是String类型
         if type is None:
             type = types.String()
 
         if not callable(type):
             raise TypeError('type must be callable')
+        #配置的类型
         self.type = type
 
+        #用于通过python访问在时，使用的名称
         if dest is None:
             self.dest = self.name.replace('-', '_')
         else:
@@ -1350,7 +1357,7 @@ class BoolOpt(Opt):
 
         return kwargs
 
-
+#整型的Opt，对外提供min,max约束
 class IntOpt(Opt):
 
     r"""Option with Integer type
@@ -1831,6 +1838,7 @@ class OptGroup(object):
             'driver_opts': self._driver_opts,
         }
 
+    #向group中添加opt
     def _register_opt(self, opt, cli=False):
         """Add an opt to this group.
 
@@ -1892,17 +1900,21 @@ class ConfigParser(iniparser.BaseParser):
     def __init__(self, filename, sections):
         super(ConfigParser, self).__init__()
         self.filename = filename
+        #所有sections
         self.sections = sections
         self._normalized = None
+        #当前section信息
         self.section = None
 
     def _add_normalized(self, normalized):
         self._normalized = normalized
 
+    #打开配置文件，并调用基类进行解析
     def parse(self):
         with open(self.filename) as f:
             return super(ConfigParser, self).parse(f)
 
+    #创建新的section
     def new_section(self, section):
         self.section = section
         self.sections.setdefault(self.section, {})
@@ -1911,8 +1923,10 @@ class ConfigParser(iniparser.BaseParser):
             self._normalized.setdefault(_normalize_group_name(self.section),
                                         {})
 
+    #为当前section中添加key的属性值
     def assignment(self, key, value):
         if not self.section:
+            #未指定section,报错
             raise self.error_no_section()
 
         value = '\n'.join(value)
@@ -1921,10 +1935,13 @@ class ConfigParser(iniparser.BaseParser):
             sections[section].setdefault(key, [])
             sections[section][key].append(value)
 
+        #向sectons中添加当前section,并向其添加key的赋值（默认key的赋值有多个）
         append(self.sections, self.section)
         if self._normalized is not None:
+            #规则化secion名称
             append(self._normalized, _normalize_group_name(self.section))
 
+    #在基类报错信息前添加文件名称
     def parse_exc(self, msg, lineno, line=None):
         return ParseError(msg, lineno, line, self.filename)
 
@@ -1938,14 +1955,18 @@ class ConfigParser(iniparser.BaseParser):
 
         :raises: ConfigFileParseError, ConfigFileValueError
         """
+        #取配置文件绝对路径
         config_file = _fixpath(config_file)
 
         sections = {}
         normalized = {}
+        #采用配置文件路径及sections构造parser
         parser = cls(config_file, sections)
+        #要求section正规化
         parser._add_normalized(normalized)
 
         try:
+            #将ini文件解析成section数组
             parser.parse()
         except iniparser.ParseError as pe:
             raise ConfigFileParseError(pe.filename, str(pe))
@@ -1958,6 +1979,7 @@ class ConfigParser(iniparser.BaseParser):
                 return
             raise
 
+        #将解析内容添加到CFG中
         namespace._add_parsed_config_file(sections, normalized)
         namespace._parse_cli_opts_from_config_file(sections, normalized)
 
@@ -2141,13 +2163,16 @@ class _Namespace(argparse.Namespace):
                 dest = group_name + '_' + opt.dest
 
             if opt.multi:
+                #如果容许有多个值，则扩展其属性为数组类型
                 if getattr(self, dest, None) is None:
                     setattr(self, dest, [])
                 values = getattr(self, dest)
                 values.extend(value)
             else:
+                #设置self的属性值为其配置值
                 setattr(self, dest, value)
 
+    #在parsed的首位置存放新parse的sections配置及normalized配置
     def _add_parsed_config_file(self, sections, normalized):
         """Add a parsed config file to the list of parsed files.
 
@@ -2351,12 +2376,15 @@ class ConfigOpts(collections.Mapping):
     :oslo.config:option:`config_dir` options.
 
     """
+    #不容许的opt名称
     disallow_names = ('project', 'prog', 'version',
                       'usage', 'default_config_files', 'default_config_dirs')
 
     def __init__(self):
         """Construct a ConfigOpts object."""
+        #记录注册的选项
         self._opts = {}  # dict of dicts of (opt:, override:, default:)
+        #记录注册的group
         self._groups = {}
         self._deprecated_opts = {}
 
@@ -2368,6 +2396,7 @@ class ConfigOpts(collections.Mapping):
         self._mutate_hooks = set([])
         self.__cache = {}
         self._config_opts = []
+        #记录注册的命令行选项
         self._cli_opts = collections.deque()
         self._validate_default_values = False
 
@@ -2435,6 +2464,7 @@ class ConfigOpts(collections.Mapping):
         self.prog = prog
         self.version = version
         self.usage = usage
+        #设置默认的配置文件路径及默认的配置目录
         self.default_config_files = default_config_files
         self.default_config_dirs = default_config_dirs
 
@@ -2450,6 +2480,10 @@ class ConfigOpts(collections.Mapping):
 
         return __inner
 
+    #对外提供参数调用入口，例如：
+    #cfg.CONF(args=args, project='tacker',
+    #         version='%%prog %s' % version.version_info.release_string(),
+    #         **kwargs)
     def __call__(self,
                  args=None,
                  project=None,
@@ -2570,12 +2604,15 @@ class ConfigOpts(collections.Mapping):
         for group in self._groups.values():
             group._clear()
 
+    #向cli中添加选项
     def _add_cli_opt(self, opt, group):
         if {'opt': opt, 'group': group} in self._cli_opts:
             return
         if opt.positional:
+            #右侧加入
             self._cli_opts.append({'opt': opt, 'group': group})
         else:
+            #左侧加入
             self._cli_opts.appendleft({'opt': opt, 'group': group})
 
     def _track_deprecated_opts(self, opt, group=None):
@@ -2598,6 +2635,7 @@ class ConfigOpts(collections.Mapping):
                         'group': group
                     }
 
+    #注册选项
     @__clear_cache
     def register_opt(self, opt, group=None, cli=False):
         """Register an option schema.
@@ -2615,6 +2653,7 @@ class ConfigOpts(collections.Mapping):
         if group is not None:
             group = self._get_group(group, autocreate=True)
             if cli:
+                #添加为cli选项
                 self._add_cli_opt(opt, group)
             self._track_deprecated_opts(opt, group=group)
             return group._register_opt(opt, cli)
@@ -2624,12 +2663,14 @@ class ConfigOpts(collections.Mapping):
         # default_config_files and default_config_dirs.
         if group is None:
             if opt.name in self.disallow_names:
+                #opt名称不能为内置名称
                 raise ValueError('Name %s was reserved for oslo.config.'
                                  % opt.name)
 
         if cli:
             self._add_cli_opt(opt, None)
 
+        #检查是否已注册
         if _is_opt_registered(self._opts, opt):
             return False
 
@@ -2637,6 +2678,7 @@ class ConfigOpts(collections.Mapping):
         self._track_deprecated_opts(opt)
         return True
 
+    #注册多个选项
     @__clear_cache
     def register_opts(self, opts, group=None):
         """Register multiple option schemas at once."""
@@ -2667,6 +2709,7 @@ class ConfigOpts(collections.Mapping):
         for opt in opts:
             self.register_cli_opt(opt, group, clear_cache=False)
 
+    #添加group到self中
     def register_group(self, group):
         """Register an option group.
 
@@ -2824,6 +2867,7 @@ class ConfigOpts(collections.Mapping):
             for info in group._opts.values():
                 yield info, group
 
+    #遍历每个cli_opts,获得其opt,及其group
     def _all_cli_opts(self):
         """A generator function for iterating CLI opts."""
         for item in self._cli_opts:
@@ -3082,11 +3126,13 @@ class ConfigOpts(collections.Mapping):
         group_name = group.name if group else group_or_name
 
         if group_name not in self._groups:
+            #组还不存在，如果需要创建，则创建此组
             if not autocreate:
                 raise NoSuchGroupError(group_name)
 
             self.register_group(group or OptGroup(name=group_name))
 
+        #返回新创建的或者存在的组
         return self._groups[group_name]
 
     def _find_deprecated_opts(self, opt_name, group=None):
@@ -3137,6 +3183,7 @@ class ConfigOpts(collections.Mapping):
 
         return opts[opt_name]
 
+    #配置检查
     def _check_required_opts(self, namespace=None):
         """Check that all opts marked as required have values specified.
 
@@ -3165,10 +3212,12 @@ class ConfigOpts(collections.Mapping):
                  ConfigFileParseError, ConfigFileValueError
 
         """
+        #设置命令行参数
         self._args = args
         for opt, group in self._all_cli_opts():
             opt._add_to_cli(self._oparser, group)
-
+        
+        #解析配置文件
         return self._parse_config_files()
 
     def _parse_config_files(self):
@@ -3182,12 +3231,15 @@ class ConfigOpts(collections.Mapping):
 
         # handle --config-file args or the default_config_files
         for arg in self._args:
+            #如果参数指定了配置文件路径，则使用参数指定的
             if arg == '--config-file' or arg.startswith('--config-file='):
                 break
         else:
+            #如果参数未指定配置文件，则使用默认的配置文件
             for config_file in self.default_config_files:
                 ConfigParser._parse_file(config_file, namespace)
 
+        #处理--config-dir配置选项，找到配置文件，并将其解析，然后按属性存入到CFG中
         # handle --config-dir args or the default_config_dirs
         for arg in self._args:
             if arg == '--config-dir' or arg.startswith('--config-dir='):
